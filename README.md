@@ -4,15 +4,15 @@ automatically split a large movie file into component scenes
 README
 FORK FROM geluso/ffmpeg-scene-extraction
 
-使用方法为在终端或者cmd下用如下命令：
+# 使用方法为在终端或者cmd下用如下命令：
 Use command as:
 python + 路径\batchSceneCut.py + 素材文件夹
 python + PATH\batchSceneCut.py + PATHyouWant2extraction
 例如：
-such as:
+# such as:
 python /Users/hanyuanliu/Desktop/batchSceneCut/batchSceneCut_win.py /Users/hanyuanliu/Documents/This/xavc 
-！！！注意不要再路径后面添加"/"！！！
-!!!Attention not add / after PATHyouWant2extraction!!!
+# ！！！注意不要再路径后面添加"/"！！！
+# !!!Attention not add / after PATHyouWant2extraction!!!
 
 
 在batchSceneCut.py文件中定义了场景探测灵敏度
