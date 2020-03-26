@@ -17,25 +17,13 @@ from subprocess import call, check_output
 from time import sleep
 from uuid import uuid1
 
-#path2ffmpeg
-#ffpath=""
-
-# ffprobe -i clip.dv -show_format 2>&1 | grep 'duration='
-#duration_command = "ffprobe -hide_banner -i %s -show_format 2>&1 | findstr /i /m 'duration='"
 duration_command = "ffprobe -hide_banner -i %s -show_format 2>&1"
-# ffprobe -show_frames -of compact=p=0 -f lavfi "movie=clip-135-02-05\ 05;27;15.dv,select=gt(scene\,.4)" > scenes.txt
-#probe_command = "ffprobe -hide_banner -show_frames -of compact=p=0 -f lavfi \"movie=%s,select=gt(scene\,0.4)\" > %s 2>&1"
 probe_command = "ffmpeg -hide_banner -i %s -vf \"select=gt(scene\,0.4),showinfo\" -f null - 2>%s "
-
-# ffmpeg -i clip.dv -f segment -segment_times 7,20,47 -c copy -map 0:0 scenes/%04d.dv"""
-extract_command = "ffmpeg.exe -hide_banner -i %s -f segment -segment_times %s -c copy -map 0:0 -write_bext 1 %s/%s_%%04d.mxf 2>nul"
+extract_command = "ffmpeg.exe -hide_banner -i %s -f segment -segment_times %s -c copy -map 0:0 -write_bext 1 %s\\%s_%s%%04d.mxf 2>nul"
 
 # Define the command line parser
 parser = argparse.ArgumentParser(description="This takes one large video file and creates smaller video files representing each scene in the original movie file.")
 parser.add_argument("in_file", type=str, help="Name of the input path.")
-
-def log_current_time():
-  print (datetime.now().isoformat())
 
 def unescape(path):
   path = path.replace("\\ ", " ")
@@ -60,10 +48,9 @@ def seconds_to_timestamp(seconds):
 
 def get_duration(filename):
   cmd = duration_command % (filename)
-  #print (cmd)
-  global duration
   duration = ""
   duration = check_output(cmd, shell=True)
+  duration = duration.decode()
   duration = duration.split("duration=")[1]
   duration = duration.split(".")[0]
   duration = int(duration)
@@ -104,95 +91,71 @@ def detect_scenes(filename, timestamps_txt, duration):
     # probe the movie and create a text file containing timestamps of scene changes
     print ("Probing scene changes in %s" %filename)
     cmd = probe_command % (filename, timestamps_txt)
-    #print (cmd)
     call(cmd, shell=True)
-
-  def show_progress(timestamp):
-    t1 = seconds_to_timestamp(timestamp)
-    t2 = seconds_to_timestamp(duration)
-    percent = 100 * (timestamp / duration)
-    print ("Found scene change at %s of %s (%02.2f%% complete)" % (t1, t2, percent))
-
-  def poll():
-    cmd = "type %s" % (timestamps_txt)
-    call (cmd, shell=True)
-    #lines = check_output(cmd, shell=True)
-    #lines = "type %s" % (timestamps_txt)
-    #print ("lens check_output %s" %lines)
-    #lines = lines.split("\n")
-    #print ("lens split %s" %lines)
-    #lines = filter(is_timestamp, lines)
-    #print ("lens filter %s" %lines)
-    #timestamps = map(line_to_timestamp, lines)
-    #print (timestamps)
-
-    #for timestamp in timestamps:
-      #if timestamp not in scenes:
-        #scenes.append(timestamp)
-        #show_progress(timestamp)
 
   prober = threading.Thread(target=probe)
   prober.start()
 
   while (prober.is_alive()):
-    #poll()
     sleep(1)
   times = open(unescape(timestamps_txt)).readlines()
   times = filter(is_timestamp, times)
-  scenes = map(line_to_timestamp, times)
+  scenes = list(map(line_to_timestamp, times))
   print ("Scene detection complete. %d scenes found." % (len(scenes)))
 
   scenes.sort()
   return scenes
 
 def extract_scenes(filename, scenes):
-  print ("Extracting scenes...")
-  scenes = map(str, scenes)
-  times = ",".join(scenes)
   basename = os.path.basename(filename)
   basename, _ = os.path.splitext(basename)
   scenes_dir = get_dir(filename) + "\\scenes"
-  cmd = extract_command % (filename, times, scenes_dir, basename)
-  #print (cmd)
-  call(cmd, shell=True)
+  if len(scenes) > 650:
+    i = 0
+    while i*650+650 < len(scenes):
+      print ("Extracting scenes: " + str(i) + '~' + str(i*650+650))
+      scenesdo = scenes[i:i*650+650]
+      scenesdo = map(str, scenesdo)
+      times = ",".join(scenesdo)
+      cmd = extract_command % (filename, times, scenes_dir, basename, i)
+      #print (cmd)
+      call(cmd, shell=True)
+      #print (scenes_dir + '\\' + basename + '_' + str(i) + str(i*650+650).zfill(4) + '.mxf')
+      os.remove(scenes_dir + '\\' + basename + '_' + str(i) + str(i*650+650).zfill(4) + '.mxf')
+      i=i+1
+    else:
+      print ("Extracting scenes: " + str(i*650-1) + '~' + str(len(scenes)))
+      scenesdo = scenes[i*650-1:]
+      scenesdo = map(str, scenesdo)
+      times = ",".join(scenesdo)
+      cmd = extract_command % (filename, times, scenes_dir, basename, i)
+      #print (cmd)
+      call(cmd, shell=True)
+      os.remove(scenes_dir + '\\' + basename + '_' + str(i) + '0000.mxf')
+  else:
+    print ("Extracting scenes...")
+    scenes = map(str, scenes)
+    times = ",".join(scenes)
+    cmd = extract_command % (filename, times, scenes_dir, basename, 0)
+    call(cmd, shell=True)
 
 def get_dir(filename):
   path = filename.split("\\")
   return "\\".join(path[:-1])
 
-def getFiles(dir, suffix): 
-    res = []
-    files = os.listdir(dir)
-    dir = dir + "\\"
-    for filename in files:
-        name, suf = os.path.splitext(filename)
-        if suf == suffix:
-            res.append(os.path.join(dir, filename))
-            #print (os.path.join(dir, filename))
-    return res
-
 def main():
   args = parser.parse_args()
   #print (args)
-  dirname = args.in_file.replace(" ", "\\ ")
-  #print (dirname)
-  for filename in getFiles(dirname, '.mxf'):
-    #print (filename)
-    #log_current_time()
-    #print ("Processing: %s" %filename)
-    duration = get_duration(filename)
-    timestamps_txt = create_scenes_dir(filename)
-    #time.sleep(1)
-    times = open(unescape(timestamps_txt)).readlines()
-    if len(times) > 0:
-      times = filter(is_timestamp, times)
-      scenes = map(line_to_timestamp, times)
-      #print (scenes)
-    else:
-      #log_current_time()
-      scenes = detect_scenes(filename, timestamps_txt, duration)
-
-    #log_current_time()
-    extract_scenes(filename, scenes)
+  filename = args.in_file.replace(" ", "\\ ")
+  print ("Processing: %s" %filename)
+  duration = get_duration(filename)
+  timestamps_txt = create_scenes_dir(filename)
+  times = open(unescape(timestamps_txt)).readlines()
+  if len(times) > 0:
+    times = filter(is_timestamp, times)
+    scenes = list(map(line_to_timestamp, times))
+  else:
+    scenes = detect_scenes(filename, timestamps_txt, duration)
+  extract_scenes(filename, scenes)
 
 main()
